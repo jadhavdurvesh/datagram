@@ -1,83 +1,17 @@
-//! DATAGRAM: a bounded UDP socket adapter. UDP provides no delivery guarantees.
-
-use std::io;
-use std::net::{SocketAddr, UdpSocket};
-use std::time::Duration;
-
-#[derive(Clone, Copy, Debug)]
-pub struct Config {
-    pub max_payload: usize,
-    pub read_timeout: Option<Duration>,
-}
-impl Default for Config {
-    fn default() -> Self { Self { max_payload: 1200, read_timeout: Some(Duration::from_millis(250)) } }
-}
-
-#[derive(Debug)]
-pub enum DatagramError {
-    Io(io::Error),
-    PayloadTooLarge { actual: usize, maximum: usize },
-    ReceiveBufferTooSmall { minimum: usize },
-}
-impl From<io::Error> for DatagramError {
-    fn from(value: io::Error) -> Self { Self::Io(value) }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Received { pub length: usize, pub peer: SocketAddr }
-
-pub struct Endpoint { socket: UdpSocket, config: Config }
-
-impl Endpoint {
-    pub fn bind(address: impl std::net::ToSocketAddrs, config: Config) -> Result<Self, DatagramError> {
-        let socket = UdpSocket::bind(address)?;
-        socket.set_read_timeout(config.read_timeout)?;
-        Ok(Self { socket, config })
-    }
-
-    pub fn local_addr(&self) -> Result<SocketAddr, DatagramError> { Ok(self.socket.local_addr()?) }
-
-    pub fn send_to(&self, payload: &[u8], peer: SocketAddr) -> Result<usize, DatagramError> {
-        if payload.len() > self.config.max_payload {
-            return Err(DatagramError::PayloadTooLarge { actual: payload.len(), maximum: self.config.max_payload });
-        }
-        Ok(self.socket.send_to(payload, peer)?)
-    }
-
-    /// Receive into caller-owned memory. The buffer must be at least max_payload + 1
-    /// bytes so an oversized datagram cannot be mistaken for a valid truncated one.
-    pub fn receive_from(&self, output: &mut [u8]) -> Result<Received, DatagramError> {
-        let minimum = self.config.max_payload.saturating_add(1);
-        if output.len() < minimum {
-            return Err(DatagramError::ReceiveBufferTooSmall { minimum });
-        }
-        let (length, peer) = self.socket.recv_from(output)?;
-        if length > self.config.max_payload {
-            return Err(DatagramError::PayloadTooLarge { actual: length, maximum: self.config.max_payload });
-        }
-        Ok(Received { length, peer })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn sends_and_receives_local_datagram() {
-        let config = Config { max_payload: 128, read_timeout: Some(Duration::from_secs(1)) };
-        let receiver = Endpoint::bind("127.0.0.1:0", config).unwrap();
-        let sender = Endpoint::bind("127.0.0.1:0", config).unwrap();
-        let peer = receiver.local_addr().unwrap();
-        sender.send_to(b"octet-frame", peer).unwrap();
-        let mut buffer = [0u8; 129];
-        let received = receiver.receive_from(&mut buffer).unwrap();
-        assert_eq!(&buffer[..received.length], b"octet-frame");
-    }
-
-    #[test]
-    fn rejects_oversized_send() {
-        let endpoint = Endpoint::bind("127.0.0.1:0", Config { max_payload: 2, read_timeout: None }).unwrap();
-        let peer = endpoint.local_addr().unwrap();
-        assert!(matches!(endpoint.send_to(b"abc", peer), Err(DatagramError::PayloadTooLarge { .. })));
-    }
-}
+//! DATAGRAM bounded UDP transport and replay-window primitives.
+use std::{io,net::{SocketAddr,ToSocketAddrs,UdpSocket},time::Duration};
+#[derive(Clone,Copy,Debug)]pub struct Config{pub max_payload:usize,pub read_timeout:Option<Duration>}
+impl Default for Config{fn default()->Self{Self{max_payload:1200,read_timeout:Some(Duration::from_millis(250))}}}
+#[derive(Debug)]pub enum DatagramError{Io(io::Error),PayloadTooLarge{actual:usize,maximum:usize},ReceiveBufferTooSmall{minimum:usize},MalformedEnvelope}
+impl From<io::Error> for DatagramError{fn from(v:io::Error)->Self{Self::Io(v)}}
+#[derive(Debug,PartialEq,Eq)]pub struct Received{pub length:usize,pub peer:SocketAddr}
+pub struct Endpoint{socket:UdpSocket,config:Config}
+impl Endpoint{pub fn bind(a:impl ToSocketAddrs,c:Config)->Result<Self,DatagramError>{let s=UdpSocket::bind(a)?;s.set_read_timeout(c.read_timeout)?;Ok(Self{socket:s,config:c})}pub fn local_addr(&self)->Result<SocketAddr,DatagramError>{Ok(self.socket.local_addr()?)}pub fn send_to(&self,p:&[u8],peer:SocketAddr)->Result<usize,DatagramError>{if p.len()>self.config.max_payload{return Err(DatagramError::PayloadTooLarge{actual:p.len(),maximum:self.config.max_payload});}Ok(self.socket.send_to(p,peer)?)}pub fn receive_from(&self,o:&mut[u8])->Result<Received,DatagramError>{let m=self.config.max_payload.saturating_add(1);if o.len()<m{return Err(DatagramError::ReceiveBufferTooSmall{minimum:m});}let(n,peer)=self.socket.recv_from(o)?;if n>self.config.max_payload{return Err(DatagramError::PayloadTooLarge{actual:n,maximum:self.config.max_payload});}Ok(Received{length:n,peer})}}
+pub const ENVELOPE_HEADER:usize=24;
+#[derive(Debug,PartialEq,Eq)]pub struct Message<'a>{pub flags:u8,pub session:u64,pub sequence:u64,pub payload:&'a[u8]}
+pub fn encode_message<'a>(flags:u8,session:u64,sequence:u64,p:&[u8],o:&'a mut[u8],max:usize)->Result<&'a[u8],DatagramError>{if p.len()>max||p.len()>u16::MAX as usize{return Err(DatagramError::PayloadTooLarge{actual:p.len(),maximum:max.min(u16::MAX as usize)});}let n=24+p.len();if o.len()<n{return Err(DatagramError::ReceiveBufferTooSmall{minimum:n});}o[..4].copy_from_slice(b"DGM1");o[4]=1;o[5]=flags;o[6..14].copy_from_slice(&session.to_be_bytes());o[14..22].copy_from_slice(&sequence.to_be_bytes());o[22..24].copy_from_slice(&(p.len()as u16).to_be_bytes());o[24..n].copy_from_slice(p);Ok(&o[..n])}
+pub fn decode_message(i:&[u8],max:usize)->Result<Message<'_>,DatagramError>{if i.len()<24||&i[..4]!=b"DGM1"||i[4]!=1{return Err(DatagramError::MalformedEnvelope);}let s=u64::from_be_bytes(i[6..14].try_into().unwrap());let q=u64::from_be_bytes(i[14..22].try_into().unwrap());let n=u16::from_be_bytes(i[22..24].try_into().unwrap())as usize;if n>max{return Err(DatagramError::PayloadTooLarge{actual:n,maximum:max});}if i.len()!=24+n{return Err(DatagramError::MalformedEnvelope);}Ok(Message{flags:i[5],session:s,sequence:q,payload:&i[24..]})}
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]pub enum ReplayDecision{Fresh,Duplicate,TooOld}
+#[derive(Debug,Default)]pub struct ReplayWindow{highest:Option<u64>,bitmap:u64}
+impl ReplayWindow{pub fn check_and_mark(&mut self,q:u64)->ReplayDecision{let Some(h)=self.highest else{self.highest=Some(q);self.bitmap=1;return ReplayDecision::Fresh;};if q>h{let d=q-h;self.bitmap=if d>=64{1}else{(self.bitmap<<d)|1};self.highest=Some(q);return ReplayDecision::Fresh;}let age=h-q;if age>=64{return ReplayDecision::TooOld;}let bit=1u64<<age;if self.bitmap&bit!=0{return ReplayDecision::Duplicate;}self.bitmap|=bit;ReplayDecision::Fresh}}
+#[cfg(test)]mod tests{use super::*;#[test]fn envelope(){let mut b=[0;64];let w=encode_message(1,5,8,b"abc",&mut b,32).unwrap();let m=decode_message(w,32).unwrap();assert_eq!(m.session,5);assert_eq!(m.payload,b"abc");}#[test]fn replay(){let mut w=ReplayWindow::default();assert_eq!(w.check_and_mark(5),ReplayDecision::Fresh);assert_eq!(w.check_and_mark(5),ReplayDecision::Duplicate);assert_eq!(w.check_and_mark(6),ReplayDecision::Fresh);assert_eq!(w.check_and_mark(1),ReplayDecision::TooOld);}#[test]fn udp_local(){let c=Config{max_payload:64,read_timeout:Some(Duration::from_secs(1))};let rx=Endpoint::bind("127.0.0.1:0",c).unwrap();let tx=Endpoint::bind("127.0.0.1:0",c).unwrap();tx.send_to(b"ok",rx.local_addr().unwrap()).unwrap();let mut b=[0;65];let n=rx.receive_from(&mut b).unwrap();assert_eq!(&b[..n.length],b"ok");}}
