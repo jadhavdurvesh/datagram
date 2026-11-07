@@ -10,7 +10,10 @@
 - [ ] Correctly detect/report datagram truncation on supported platforms.
 - [ ] Non-blocking and cancellation-aware receive APIs.
 - [ ] General authenticated peer/session API and key lifecycle.
-- [ ] General reliability profile with acknowledgements, congestion control and MTU discovery.
+- [ ] Define and implement a wire-level ACK/reliability profile.
+- [x] Reusable per-path congestion controller with pacing, ACK/loss feedback, RTT/RTO estimation and bounded in-flight metadata.
+- [x] Explicit path MTU discovery state machine with authenticated-probe contract.
+- [ ] Integrate controller and MTU state into a complete transport adapter.
 - [ ] Network fault injection, cross-language conformance tests and fuzzing.
 - [ ] Benchmarks on target ARM and desktop hardware.
 
