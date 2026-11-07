@@ -1,0 +1,9 @@
+[package]
+name = "datagram"
+version = "0.1.0"
+edition = "2021"
+description = "Research-oriented bounded UDP networking engine"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
