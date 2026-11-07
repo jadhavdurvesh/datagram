@@ -77,6 +77,15 @@ mod tests {
         assert_eq!(AckFrame::decode(&wire).unwrap(), frame);
     }
     #[test]
+    fn matches_callgraph_go_golden_wire_vector() {
+        let frame = AckFrame { largest_acked: 100, ack_delay_micros: 250, ranges: vec![AckRange { first: 98, last: 100 }, AckRange { first: 90, last: 94 }] };
+        let hex = "41434b31010000000000000000000064000000fa0200000000000000000000620000000000000064000000000000005a000000000000005e";
+        let expected: Vec<u8> = hex.as_bytes().chunks_exact(2).map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap()).collect();
+        assert_eq!(frame.encode().unwrap(), expected);
+        assert_eq!(AckFrame::decode(&expected).unwrap(), frame);
+    }
+
+    #[test]
     fn rejects_truncated_and_bad_length_frames() {
         assert_eq!(AckFrame::decode(b"ACK1"), Err(AckError::Truncated));
         let frame = AckFrame { largest_acked: 1, ack_delay_micros: 0, ranges: vec![AckRange { first: 1, last: 1 }] };
