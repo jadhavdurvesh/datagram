@@ -23,7 +23,7 @@ The Go CALLGRAPH transport adapter currently layers optional AES-256-GCM protect
 - request and response use separate direction domains;
 - encrypted packets are authenticated before consuming replay-cache capacity.
 
-This is an interoperability profile implemented by CALLGRAPH's Go adapter and CONTRACT's Rust client. The standalone Rust DATAGRAM crate does not yet implement this PSK/AEAD layer.
+This is an interoperability profile implemented by CALLGRAPH's Go adapter and CONTRACT's Rust client. The standalone Rust DATAGRAM crate exposes the same AES-256-GCM payload seal/open primitives. CONTRACT now delegates its Rust AEAD operations to that shared crate; CALLGRAPH implements the interoperable Go counterpart.
 
 ## Reliability
 CALLGRAPH currently implements bounded request retransmission, duplicate suppression and in-memory cached responses. This is stop-and-wait per request, not a general reliable transport. The standalone DATAGRAM crate does not yet implement retransmission or congestion control.
