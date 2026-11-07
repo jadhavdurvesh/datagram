@@ -275,15 +275,25 @@ mod tests {
     }
 
     #[test]
-    fn applies_ack_ranges_and_ack_delay_to_congestion_state() {
+    fn applies_disjoint_ack_ranges_to_in_flight_packets() {
         let now = Instant::now();
         let mut cc = CongestionController::new(CongestionConfig::default(), now).unwrap();
+        cc.on_packet_sent(1, 1000, now).unwrap();
         cc.on_packet_sent(2, 1000, now + Duration::from_millis(100)).unwrap();
         cc.on_packet_sent(3, 1000, now + Duration::from_millis(200)).unwrap();
-        let ack = AckFrame { largest_acked: 3, ack_delay_micros: 20_000, ranges: vec![crate::ack::AckRange { first: 3, last: 3 }, crate::ack::AckRange { first: 1, last: 1 }] };
-        assert_eq!(cc.apply_ack(&ack, now + Duration::from_millis(300)).unwrap(), 1);
+        let ack = AckFrame { largest_acked: 3, ack_delay_micros: 0, ranges: vec![crate::ack::AckRange { first: 3, last: 3 }, crate::ack::AckRange { first: 1, last: 1 }] };
+        assert_eq!(cc.apply_ack(&ack, now + Duration::from_millis(300)).unwrap(), 2);
         assert_eq!(cc.snapshot().bytes_in_flight, 1000);
         assert_eq!(cc.snapshot().outstanding_packets, 1);
+    }
+
+    #[test]
+    fn subtracts_ack_delay_from_rtt_sample() {
+        let now = Instant::now();
+        let mut cc = CongestionController::new(CongestionConfig::default(), now).unwrap();
+        cc.on_packet_sent(1, 1000, now).unwrap();
+        let ack = AckFrame { largest_acked: 1, ack_delay_micros: 20_000, ranges: vec![crate::ack::AckRange { first: 1, last: 1 }] };
+        assert_eq!(cc.apply_ack(&ack, now + Duration::from_millis(100)).unwrap(), 1);
         assert_eq!(cc.snapshot().smoothed_rtt, Duration::from_millis(80));
     }
 
