@@ -194,6 +194,11 @@ impl CongestionController {
             })
             .collect();
         for id in &expired { let _ = self.on_loss(*id); }
+        if !expired.is_empty() {
+            self.retransmission_timeout = self.retransmission_timeout
+                .saturating_mul(2)
+                .min(self.config.maximum_rto);
+        }
         expired
     }
 
@@ -259,6 +264,7 @@ mod tests {
         assert_eq!(cc.detect_losses(now + Duration::from_millis(200)), vec![7]);
         assert_eq!(cc.snapshot().bytes_in_flight, 0);
         assert_eq!(cc.snapshot().outstanding_packets, 0);
+        assert_eq!(cc.snapshot().retransmission_timeout, Duration::from_millis(400));
     }
 
     #[test]
