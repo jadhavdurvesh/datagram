@@ -11,6 +11,7 @@ pub struct CongestionConfig {
     pub initial_window_datagrams: usize,
     pub minimum_window_datagrams: usize,
     pub maximum_window_bytes: usize,
+    pub maximum_outstanding_packets: usize,
     pub initial_rtt: Duration,
     pub minimum_rto: Duration,
     pub maximum_rto: Duration,
@@ -23,6 +24,7 @@ impl Default for CongestionConfig {
             initial_window_datagrams: 10,
             minimum_window_datagrams: 2,
             maximum_window_bytes: 16 * 1024 * 1024,
+            maximum_outstanding_packets: 4096,
             initial_rtt: Duration::from_millis(100),
             minimum_rto: Duration::from_millis(200),
             maximum_rto: Duration::from_secs(60),
@@ -39,6 +41,7 @@ pub enum CongestionError {
     UnknownPacketId,
     CongestionWindowFull,
     PacingLimited,
+    TooManyOutstandingPackets,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,6 +82,7 @@ impl CongestionController {
             || config.initial_window_datagrams < config.minimum_window_datagrams
             || config.minimum_window_datagrams == 0
             || config.maximum_window_bytes < config.max_datagram_size.saturating_mul(config.minimum_window_datagrams)
+            || config.maximum_outstanding_packets == 0
             || config.initial_rtt.is_zero()
             || config.minimum_rto.is_zero()
             || config.maximum_rto < config.minimum_rto
@@ -118,6 +122,7 @@ impl CongestionController {
 
     pub fn on_packet_sent(&mut self, packet_id: u64, bytes: usize, now: Instant) -> Result<(), CongestionError> {
         self.can_send(bytes, now)?;
+        if self.outstanding.len() >= self.config.maximum_outstanding_packets { return Err(CongestionError::TooManyOutstandingPackets); }
         if self.outstanding.contains_key(&packet_id) { return Err(CongestionError::DuplicatePacketId); }
         self.outstanding.insert(packet_id, SentPacket { bytes, sent_at: now });
         self.bytes_in_flight = self.bytes_in_flight.saturating_add(bytes);
@@ -179,6 +184,19 @@ impl CongestionController {
         Ok(())
     }
 
+    /// Mark packets whose retransmission timer expired as lost and return their IDs.
+    /// The caller is responsible for retransmission policy and packet re-encoding.
+    pub fn detect_losses(&mut self, now: Instant) -> Vec<u64> {
+        let expired: Vec<u64> = self.outstanding.iter()
+            .filter_map(|(id, packet)| {
+                (now.saturating_duration_since(packet.sent_at) >= self.retransmission_timeout)
+                    .then_some(*id)
+            })
+            .collect();
+        for id in &expired { let _ = self.on_loss(*id); }
+        expired
+    }
+
     pub fn snapshot(&self) -> CongestionSnapshot {
         CongestionSnapshot {
             congestion_window_bytes: self.congestion_window,
@@ -230,6 +248,26 @@ mod tests {
         cc.on_loss(2).unwrap();
         assert_eq!(cc.snapshot().congestion_window_bytes, reduced);
         assert_eq!(reduced, 6000);
+    }
+
+    #[test]
+    fn retransmission_timeout_detects_and_releases_lost_packets() {
+        let now = Instant::now();
+        let mut cc = CongestionController::new(CongestionConfig::default(), now).unwrap();
+        cc.on_packet_sent(7, 1200, now).unwrap();
+        assert!(cc.detect_losses(now + Duration::from_millis(199)).is_empty());
+        assert_eq!(cc.detect_losses(now + Duration::from_millis(200)), vec![7]);
+        assert_eq!(cc.snapshot().bytes_in_flight, 0);
+        assert_eq!(cc.snapshot().outstanding_packets, 0);
+    }
+
+    #[test]
+    fn bounds_outstanding_packet_metadata() {
+        let now = Instant::now();
+        let config = CongestionConfig { maximum_outstanding_packets: 1, ..CongestionConfig::default() };
+        let mut cc = CongestionController::new(config, now).unwrap();
+        cc.on_packet_sent(1, 100, now).unwrap();
+        assert_eq!(cc.on_packet_sent(2, 100, now + Duration::from_secs(1)), Err(CongestionError::TooManyOutstandingPackets));
     }
 
     #[test]
