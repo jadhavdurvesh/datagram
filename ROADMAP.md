@@ -11,7 +11,8 @@
 - [x] Non-blocking receive API and explicit socket mode control.
 - [ ] Cancellation-aware asynchronous receive integration.
 - [ ] General authenticated peer/session API and key lifecycle.
-- [ ] Define and implement a wire-level ACK/reliability profile.
+- [x] Define ACK1 wire frame codec with bounded ACK ranges.
+- [ ] Integrate ACK generation, authentication and state application into the UDP adapter.
 - [x] Reusable per-path congestion controller with pacing, ACK/loss feedback, RTT/RTO estimation and bounded in-flight metadata.
 - [x] Explicit path MTU discovery state machine with authenticated-probe contract.
 - [ ] Integrate controller and MTU state into a complete transport adapter.
