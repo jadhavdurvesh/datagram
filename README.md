@@ -14,7 +14,7 @@ DATAGRAM provides a controlled networking layer for message exchange between pro
 
 ## Implemented primitives
 
-- Bounded UDP endpoint wrapper and DGM1 envelope codec.
+- Bounded UDP endpoint wrapper and DGM1 envelope codec, including non-blocking receive and explicit socket mode control.
 - 64-packet replay-window primitive.
 - Shared AES-256-GCM payload protection with request/response nonce separation.
 - Per-path congestion controller with byte-based congestion window, pacing, RTT/RTO estimation, ACK/loss feedback, and bounded outstanding-packet metadata.
