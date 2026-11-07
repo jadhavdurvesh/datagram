@@ -27,7 +27,7 @@ This is an interoperability profile implemented by CALLGRAPH's Go adapter and CO
 
 ## ACK1 acknowledgement frame — draft
 
-The crate now defines an ACK1 frame codec. The fixed header is 24 bytes and contains magic, version, reserved flags, largest acknowledged packet number, ACK delay in microseconds, and a range count. Up to eight inclusive packet-number ranges follow (16 bytes each: first and last packet number). Ranges are newest-to-oldest, non-overlapping, non-adjacent (adjacent ranges must be merged), and the first range must end at largest_acked. Reserved bytes must be zero. ACK1 is a codec only; the UDP adapter must authenticate the enclosing DATAGRAM before applying ACK state.
+The crate now defines an ACK1 frame codec. The fixed header is 24 bytes and contains magic, version, reserved flags, largest acknowledged packet number, ACK delay in microseconds, and a range count. Up to eight inclusive packet-number ranges follow (16 bytes each: first and last packet number). Ranges are newest-to-oldest, non-overlapping, non-adjacent (adjacent ranges must be merged), and the first range must end at largest_acked. Reserved bytes must be zero. The congestion controller can apply a validated ACK1 frame to its outstanding-packet and RTT state. ACK1 itself is not authenticated; the UDP adapter must authenticate the enclosing DATAGRAM before calling `apply_ack`.
 
 ## Reliability
 CALLGRAPH currently implements bounded request retransmission, duplicate suppression and in-memory cached responses. This is stop-and-wait per request, not a general reliable transport. The standalone DATAGRAM crate does not yet implement retransmission or congestion control.
