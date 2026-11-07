@@ -16,7 +16,7 @@ impl Default for MtuConfig {
         Self {
             initial_datagram_size: 1200,
             minimum_datagram_size: 576,
-            maximum_datagram_size: 1472,
+            maximum_datagram_size: 1452,
         }
     }
 }
@@ -128,6 +128,6 @@ mod tests {
     fn computes_payload_budget_and_validates_bounds() {
         let mtu = MtuDiscovery::new(MtuConfig::default()).unwrap();
         assert_eq!(mtu.payload_budget(48), 1152);
-        assert_eq!(MtuDiscovery::new(MtuConfig { initial_datagram_size: 1500, ..MtuConfig::default() }), Err(MtuError::InvalidConfig));
+        assert!(matches!(MtuDiscovery::new(MtuConfig { initial_datagram_size: 1500, ..MtuConfig::default() }), Err(MtuError::InvalidConfig)));
     }
 }
