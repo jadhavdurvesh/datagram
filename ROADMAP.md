@@ -6,7 +6,7 @@
 - [x] DGM1 message envelope encode/decode.
 - [x] 64-packet replay-window primitive.
 - [x] CALLGRAPH interoperability profile documented, including its optional AES-256-GCM PSK wrapper.
-- [ ] Move the shared AEAD/session profile into the standalone DATAGRAM library.
+- [x] Shared AES-256-GCM seal/open primitives with direction-separated nonce domain.
 - [ ] Correctly detect/report datagram truncation on supported platforms.
 - [ ] Non-blocking and cancellation-aware receive APIs.
 - [ ] General authenticated peer/session API and key lifecycle.
