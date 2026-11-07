@@ -8,7 +8,8 @@
 - [x] CALLGRAPH interoperability profile documented, including its optional AES-256-GCM PSK wrapper.
 - [x] Shared AES-256-GCM seal/open primitives with direction-separated nonce domain.
 - [ ] Correctly detect/report datagram truncation on supported platforms.
-- [ ] Non-blocking and cancellation-aware receive APIs.
+- [x] Non-blocking receive API and explicit socket mode control.
+- [ ] Cancellation-aware asynchronous receive integration.
 - [ ] General authenticated peer/session API and key lifecycle.
 - [ ] Define and implement a wire-level ACK/reliability profile.
 - [x] Reusable per-path congestion controller with pacing, ACK/loss feedback, RTT/RTO estimation and bounded in-flight metadata.
