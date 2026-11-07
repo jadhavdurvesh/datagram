@@ -3,6 +3,7 @@
 //! This is a conservative Reno-style byte controller, not a complete Internet
 //! congestion-control implementation. The caller supplies packet ACK/loss
 //! signals and must keep one controller per network path.
+use crate::ack::{AckError, AckFrame};
 use std::{collections::BTreeMap, time::{Duration, Instant}};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,6 +43,7 @@ pub enum CongestionError {
     CongestionWindowFull,
     PacingLimited,
     TooManyOutstandingPackets,
+    InvalidAckFrame,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,9 +140,13 @@ impl CongestionController {
     }
 
     pub fn on_ack(&mut self, packet_id: u64, now: Instant) -> Result<(), CongestionError> {
+        self.on_ack_with_delay(packet_id, now, Duration::ZERO)
+    }
+
+    fn on_ack_with_delay(&mut self, packet_id: u64, now: Instant, ack_delay: Duration) -> Result<(), CongestionError> {
         let packet = self.outstanding.remove(&packet_id).ok_or(CongestionError::UnknownPacketId)?;
         self.bytes_in_flight = self.bytes_in_flight.saturating_sub(packet.bytes);
-        let sample = now.saturating_duration_since(packet.sent_at);
+        let sample = now.saturating_duration_since(packet.sent_at).saturating_sub(ack_delay);
         if !sample.is_zero() {
             if self.smoothed_rtt == self.config.initial_rtt && self.rtt_variance == self.config.initial_rtt / 2 {
                 self.smoothed_rtt = sample;
@@ -167,6 +173,19 @@ impl CongestionController {
                 .min(self.config.maximum_window_bytes);
         }
         Ok(())
+    }
+
+    /// Apply an authenticated ACK1 frame. Unknown/previously-acked packet IDs
+    /// are ignored, while acknowledgements beyond the sent packet space are rejected.
+    pub fn apply_ack(&mut self, ack: &AckFrame, now: Instant) -> Result<usize, CongestionError> {
+        ack.validate().map_err(|_: AckError| CongestionError::InvalidAckFrame)?;
+        if ack.largest_acked > self.largest_sent { return Err(CongestionError::InvalidAckFrame); }
+        let delay = Duration::from_micros(ack.ack_delay_micros as u64);
+        let acknowledged: Vec<u64> = self.outstanding.keys().copied()
+            .filter(|id| ack.ranges.iter().any(|range| *id >= range.first && *id <= range.last))
+            .collect();
+        for id in &acknowledged { self.on_ack_with_delay(*id, now, delay)?; }
+        Ok(acknowledged.len())
     }
 
     pub fn on_loss(&mut self, packet_id: u64) -> Result<(), CongestionError> {
@@ -253,6 +272,28 @@ mod tests {
         cc.on_loss(2).unwrap();
         assert_eq!(cc.snapshot().congestion_window_bytes, reduced);
         assert_eq!(reduced, 6000);
+    }
+
+    #[test]
+    fn applies_ack_ranges_and_ack_delay_to_congestion_state() {
+        let now = Instant::now();
+        let mut cc = CongestionController::new(CongestionConfig::default(), now).unwrap();
+        cc.on_packet_sent(1, 1000, now).unwrap();
+        cc.on_packet_sent(2, 1000, now + Duration::from_millis(100)).unwrap();
+        cc.on_packet_sent(3, 1000, now + Duration::from_millis(200)).unwrap();
+        let ack = AckFrame { largest_acked: 3, ack_delay_micros: 20_000, ranges: vec![crate::ack::AckRange { first: 3, last: 3 }, crate::ack::AckRange { first: 1, last: 1 }] };
+        assert_eq!(cc.apply_ack(&ack, now + Duration::from_millis(300)).unwrap(), 2);
+        assert_eq!(cc.snapshot().bytes_in_flight, 1000);
+        assert_eq!(cc.snapshot().outstanding_packets, 1);
+        assert_eq!(cc.snapshot().smoothed_rtt, Duration::from_millis(80));
+    }
+
+    #[test]
+    fn rejects_ack_for_unsent_packet_numbers() {
+        let now = Instant::now();
+        let mut cc = CongestionController::new(CongestionConfig::default(), now).unwrap();
+        let ack = AckFrame { largest_acked: 9, ack_delay_micros: 0, ranges: vec![crate::ack::AckRange { first: 9, last: 9 }] };
+        assert_eq!(cc.apply_ack(&ack, now), Err(CongestionError::InvalidAckFrame));
     }
 
     #[test]
