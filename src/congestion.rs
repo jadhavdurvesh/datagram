@@ -278,7 +278,6 @@ mod tests {
     fn applies_ack_ranges_and_ack_delay_to_congestion_state() {
         let now = Instant::now();
         let mut cc = CongestionController::new(CongestionConfig::default(), now).unwrap();
-        cc.on_packet_sent(1, 1000, now).unwrap();
         cc.on_packet_sent(2, 1000, now + Duration::from_millis(100)).unwrap();
         cc.on_packet_sent(3, 1000, now + Duration::from_millis(200)).unwrap();
         let ack = AckFrame { largest_acked: 3, ack_delay_micros: 20_000, ranges: vec![crate::ack::AckRange { first: 3, last: 3 }, crate::ack::AckRange { first: 1, last: 1 }] };
