@@ -27,7 +27,7 @@ DATAGRAM provides a controlled networking layer for message exchange between pro
 The congestion controller is a reusable control-plane primitive, not a complete congestion-controlled transport by itself. The adapter must:
 1. Create one controller per network path.
 2. Call `can_send` before sending a datagram and `on_packet_sent` after a successful send.
-3. Feed authenticated acknowledgements to `on_ack`.
+3. Feed authenticated ACK1 frames to `apply_ack` (or individual authenticated packet acknowledgements to `on_ack`).
 4. Call `detect_losses` on its timer and process the returned packet IDs according to the reliability policy.
 5. Use the controller's RTO and congestion window; do not treat UDP delivery as guaranteed.
 
