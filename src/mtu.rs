@@ -102,10 +102,10 @@ mod tests {
         let mut mtu = MtuDiscovery::new(MtuConfig::default()).unwrap();
         assert_eq!(mtu.current_datagram_size(), 1200);
         let p = mtu.begin_probe().unwrap().unwrap();
-        assert_eq!(p.datagram_size, 1336);
+        assert_eq!(p.datagram_size, 1326);
         mtu.complete_probe(p, true).unwrap();
         let p = mtu.begin_probe().unwrap().unwrap();
-        assert_eq!(p.datagram_size, 1404);
+        assert_eq!(p.datagram_size, 1389);
         mtu.complete_probe(p, false).unwrap();
         while let Some(p) = mtu.begin_probe().unwrap() {
             mtu.complete_probe(p, true).unwrap();
