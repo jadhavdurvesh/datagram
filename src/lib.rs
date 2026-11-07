@@ -1,3 +1,4 @@
+pub mod security;
 //! DATAGRAM: bounded UDP endpoint, message envelope and replay-window primitives.
 use std::{io,net::{SocketAddr,ToSocketAddrs,UdpSocket},time::Duration};
 #[derive(Clone,Copy,Debug)]pub struct Config{pub max_payload:usize,pub read_timeout:Option<Duration>}
