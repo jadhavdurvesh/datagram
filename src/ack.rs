@@ -13,11 +13,12 @@ pub struct AckRange { pub first: u64, pub last: u64 }
 pub struct AckFrame { pub largest_acked: u64, pub ack_delay_micros: u32, pub ranges: Vec<AckRange> }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AckError { Truncated, InvalidMagic, UnsupportedVersion, InvalidLength, TooManyRanges, InvalidRanges, OutputTooSmall }
+pub enum AckError { Truncated, InvalidMagic, UnsupportedVersion, InvalidLength, TooManyRanges, InvalidRanges }
 
 impl AckFrame {
     pub fn validate(&self) -> Result<(), AckError> {
-        if self.ranges.is_empty() || self.ranges.len() > MAX_ACK_RANGES { return Err(AckError::TooManyRanges); }
+        if self.ranges.is_empty() { return Err(AckError::InvalidRanges); }
+        if self.ranges.len() > MAX_ACK_RANGES { return Err(AckError::TooManyRanges); }
         if self.ranges[0].first > self.ranges[0].last || self.ranges[0].last != self.largest_acked { return Err(AckError::InvalidRanges); }
         for pair in self.ranges.windows(2) {
             let newer = pair[0]; let older = pair[1];
@@ -47,7 +48,8 @@ impl AckFrame {
         if input[4] != 1 { return Err(AckError::UnsupportedVersion); }
         if input[5..8] != [0, 0, 0] || input[21..24] != [0, 0, 0] { return Err(AckError::InvalidLength); }
         let count = input[20] as usize;
-        if count == 0 || count > MAX_ACK_RANGES { return Err(AckError::TooManyRanges); }
+        if count == 0 { return Err(AckError::InvalidRanges); }
+        if count > MAX_ACK_RANGES { return Err(AckError::TooManyRanges); }
         if input.len() != ACK_HEADER_LEN + count * ACK_RANGE_LEN { return Err(AckError::InvalidLength); }
         let largest_acked = u64::from_be_bytes(input[8..16].try_into().unwrap());
         let ack_delay_micros = u32::from_be_bytes(input[16..20].try_into().unwrap());
@@ -81,6 +83,13 @@ mod tests {
         let mut wire = frame.encode().unwrap(); wire.push(0);
         assert_eq!(AckFrame::decode(&wire), Err(AckError::InvalidLength));
     }
+    #[test]
+    fn rejects_nonzero_reserved_bytes() {
+        let frame = AckFrame { largest_acked: 1, ack_delay_micros: 0, ranges: vec![AckRange { first: 1, last: 1 }] };
+        let mut wire = frame.encode().unwrap(); wire[6] = 1;
+        assert_eq!(AckFrame::decode(&wire), Err(AckError::InvalidLength));
+    }
+
     #[test]
     fn rejects_overlapping_or_unordered_ranges() {
         let frame = AckFrame { largest_acked: 10, ack_delay_micros: 0, ranges: vec![AckRange { first: 8, last: 10 }, AckRange { first: 9, last: 9 }] };
