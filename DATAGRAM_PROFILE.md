@@ -25,6 +25,10 @@ The Go CALLGRAPH transport adapter currently layers optional AES-256-GCM protect
 
 This is an interoperability profile implemented by CALLGRAPH's Go adapter and CONTRACT's Rust client. The standalone Rust DATAGRAM crate exposes the same AES-256-GCM payload seal/open primitives. CONTRACT now delegates its Rust AEAD operations to that shared crate; CALLGRAPH implements the interoperable Go counterpart.
 
+## ACK1 acknowledgement frame — draft
+
+The crate now defines an ACK1 frame codec. The fixed header is 24 bytes and contains magic, version, reserved flags, largest acknowledged packet number, ACK delay in microseconds, and a range count. Up to eight inclusive packet-number ranges follow (16 bytes each: first and last packet number). Ranges are newest-to-oldest, non-overlapping, non-adjacent (adjacent ranges must be merged), and the first range must end at largest_acked. Reserved bytes must be zero. ACK1 is a codec only; the UDP adapter must authenticate the enclosing DATAGRAM before applying ACK state.
+
 ## Reliability
 CALLGRAPH currently implements bounded request retransmission, duplicate suppression and in-memory cached responses. This is stop-and-wait per request, not a general reliable transport. The standalone DATAGRAM crate does not yet implement retransmission or congestion control.
 
