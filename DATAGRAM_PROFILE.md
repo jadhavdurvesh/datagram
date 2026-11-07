@@ -1,25 +1,37 @@
-# DATAGRAM transport profile — draft 0.2
+# DATAGRAM transport profile — draft 0.3
 
 ## Base transport
 The initial engine uses OS-provided UDP over IP. UDP is message-oriented but does not guarantee delivery, ordering, uniqueness, congestion safety or peer identity.
 
-## Message metadata profile
-An application-level DATAGRAM envelope may carry:
-- protocol version;
-- sender node identifier;
-- session identifier;
-- sequence number;
-- message type;
-- expiry/deadline;
-- payload length and payload.
+## Implemented DGM1 envelope
+The current profile uses a 24-byte fixed header:
+- 4-byte magic `DGM1`;
+- 1-byte version;
+- 1-byte flags;
+- 8-byte session identifier;
+- 8-byte sequence number;
+- 2-byte big-endian payload length;
+- payload bytes.
 
-This envelope is a future profile, not yet implemented by the current UDP wrapper.
+The Rust crate provides bounded UDP endpoint operations, envelope encode/decode and a 64-packet replay-window primitive.
+
+## CALLGRAPH secure datagram profile
+The Go CALLGRAPH transport adapter currently layers optional AES-256-GCM protection over the OCTET frame carried in DGM1:
+- `SEC1` marker followed by AES-GCM ciphertext and 16-byte tag;
+- 32-byte pre-shared key configured out-of-band;
+- 96-bit nonce composed of the 64-bit session identifier and 32-bit sequence/direction field;
+- request and response use separate direction domains;
+- encrypted packets are authenticated before consuming replay-cache capacity.
+
+This is an interoperability profile implemented by CALLGRAPH's Go adapter and CONTRACT's Rust client. The standalone Rust DATAGRAM crate does not yet implement this PSK/AEAD layer.
 
 ## Reliability
-Reliability is opt-in and must be designed as a distinct profile. It requires acknowledgements, bounded retransmission, duplicate suppression, expiry, congestion control and a clear maximum in-flight window. Retransmission must not be implemented without congestion behavior.
+CALLGRAPH currently implements bounded request retransmission, duplicate suppression and in-memory cached responses. This is stop-and-wait per request, not a general reliable transport. The standalone DATAGRAM crate does not yet implement retransmission or congestion control.
 
-## Security
-Use authenticated session establishment and message integrity before accepting control-relevant peer data. Source IP/port alone is not identity. Define key rotation, replay windows and downgrade handling before production use.
+A production reliability profile still needs acknowledgements, congestion control, loss estimation, bounded in-flight windows, path MTU discovery and fairness.
+
+## Key management and limitations
+The current PSK mode has no key exchange, forward secrecy, certificate identity, automatic rotation or downgrade negotiation. Protect and rotate keys out-of-band; cap the number of sessions per key. A 64-bit random session identifier is used with a 31-bit per-direction sequence space. This is a research profile, not a reviewed security standard.
 
 ## Operational limits
 - Enforce maximum payloads and bounded queues.
