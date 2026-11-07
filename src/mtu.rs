@@ -38,7 +38,6 @@ pub struct MtuProbe {
 
 #[derive(Debug)]
 pub struct MtuDiscovery {
-    config: MtuConfig,
     current: usize,
     upper_bound: usize,
     next_id: u64,
@@ -54,7 +53,7 @@ impl MtuDiscovery {
         {
             return Err(MtuError::InvalidConfig);
         }
-        Ok(Self { config, current: config.initial_datagram_size, upper_bound: config.maximum_datagram_size, next_id: 1, active: None })
+        Ok(Self { current: config.initial_datagram_size, upper_bound: config.maximum_datagram_size, next_id: 1, active: None })
     }
 
     pub fn current_datagram_size(&self) -> usize { self.current }
@@ -64,7 +63,7 @@ impl MtuDiscovery {
         if self.active.is_some() { return Err(MtuError::ProbeInProgress); }
         if self.current >= self.upper_bound { return Ok(None); }
         let gap = self.upper_bound - self.current;
-        let size = self.current + (gap + 1) / 2;
+        let size = self.current + gap.div_ceil(2);
         let probe = MtuProbe { id: self.next_id, datagram_size: size };
         self.next_id = self.next_id.checked_add(1).unwrap_or(1);
         self.active = Some(probe);
