@@ -31,7 +31,7 @@ The congestion controller is a reusable control-plane primitive, not a complete 
 4. Call `detect_losses` on its timer and process the returned packet IDs according to the reliability policy.
 5. Use the controller's RTO and congestion window; do not treat UDP delivery as guaranteed.
 
-It currently provides a conservative Reno-style byte controller. It does not yet implement a wire-level ACK format, retransmission scheduler, ECN, fairness testing, or a complete congestion-control standard.
+It currently provides a conservative Reno-style byte controller. It does not yet implement a retransmission scheduler, ECN, fairness testing, or a complete congestion-control standard.
 
 ## Path MTU discovery contract
 
@@ -43,7 +43,7 @@ A datagram link is not a safety controller. FireBot emergency-stop, motor interl
 
 ## Status
 
-Early development; no production-readiness claim. The new congestion and MTU modules are primitives awaiting integration into a complete reliable transport adapter.
+Early development; no production-readiness claim. ACK1 can feed the congestion controller, but the Rust endpoint still needs a complete reliability adapter and integration with CALLGRAPH's Go response-acknowledgement profile.
 
 ## Related technologies
 
