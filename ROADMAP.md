@@ -12,7 +12,7 @@
 - [ ] Cancellation-aware asynchronous receive integration.
 - [ ] General authenticated peer/session API and key lifecycle.
 - [x] Define ACK1 wire frame codec with bounded ACK ranges.
-- [ ] Integrate ACK generation, authentication and state application into the UDP adapter.
+- [ ] Integrate ACK generation, authentication and state application into the standalone Rust UDP adapter. (CALLGRAPH's Go adapter now uses ACK1 for response acknowledgements.)
 - [x] Reusable per-path congestion controller with pacing, ACK/loss feedback, RTT/RTO estimation and bounded in-flight metadata.
 - [x] Explicit path MTU discovery state machine with authenticated-probe contract.
 - [ ] Integrate controller and MTU state into a complete transport adapter.
